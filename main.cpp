@@ -83,7 +83,8 @@ struct MyAllocator
 		}
 		avaiableBlocks.pushBack(p);
 	}
-	void destroty(pointer p) {
+	template< class U >
+	void destroy( U* p ){
 		p->~T();
 	}
 	template <typename U,typename ...Args >
