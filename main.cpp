@@ -1,128 +1,63 @@
-#include <map>
-#include <array>
-#include <list>
-#include <memory>
-template<class T, size_t Size>
-class RingBuffer {
-public:
-	RingBuffer() = default;
-	~RingBuffer() {};
-	void pushBack(T val) {
-		if (haveFreeSpase()) {
-			buf[head] = val;
-			head = (head + 1)%(Size);
+#include "allocator.h"
+#include <functional>
+#include <iostream>
+#include <utility>
+template<typename T, typename Alloc>
+struct MyCustomContainer{
+	
+	struct Node{
+		Node(T value, Node* ptr):value(value),next(ptr){};
+		Node() = default;
+		T value;
+		Node* next=nullptr;
+	}*node_=nullptr;
+	using alloc_type = typename Alloc::template rebind<Node>::other;
+	alloc_type allocator;
+	void insert(T val){
+		auto tmp = allocator.allocate(1);
+		allocator.construct(tmp,val,node_);
+		
+		std::swap(tmp,node_);
+	}
+	template <typename R>
+	void forEach(R&& function){
+		auto tmpNode = node_;
+		while(tmpNode!=nullptr){
+			function(tmpNode->value);
+			tmpNode = tmpNode->next;
 		}
 	}
-	void pop() {
-		if (!isEmpty()) {
-			tail = (tail + 1)%(Size);
-		}
-	}
-	T& getTail() {
-		return buf[tail];
-	}
-	T& getHead() {
-		return buf[head];
-	}
-	bool isFull() {
-		return ((head + 1)%(Size)) == tail;
-	}
-	bool isEmpty() {
-		return head == tail;
-	}
-	size_t usedSpace() {
-		int64_t _head = head, _tail = tail;
-		return (_tail>_head ? static_cast<int64_t>(Size) : 0) + (_head - _tail);
-	}
-	size_t avaiableSpace() {
-		return Size - usedSpace();
-	}
-	uint32_t haveFreeSpase() {
-		return !isFull();
-	}
-protected:
-	std::array<T, Size> buf{};
-	size_t head = 0;
-	size_t tail = 0;
-
 };
-
-//simple pool allocator can't use whith array,vector, e.t.c.
-template <typename T,size_t PoolSize>
-struct MyAllocator
+long factorial(long n)
 {
-	typedef T value_type;
-	typedef T* pointer;
-	typedef const T* const_pointer;
-	typedef T& reference;
-	typedef const T& const_reference;
-	typedef std::size_t size_type;
-	typedef std::ptrdiff_t difference_type;
-	typedef std::array<value_type, PoolSize> PoolType;
-	typedef std::true_type propagate_on_container_copy_assignment;
-	typedef std::true_type propagate_on_container_move_assignment;
-	typedef std::true_type propagate_on_container_swap;
-	PoolType memoryPool;
-	RingBuffer<pointer,PoolSize> avaiableBlocks;
-
-	MyAllocator() {
-		initAvaiableBlocks();
-	}
-	pointer allocate(std::size_t size) {
-		if (size>1||avaiableBlocks.isEmpty()) {
-			std::bad_alloc exception;
-			throw exception;
-		}
-		auto tmp = avaiableBlocks.getTail();
-		avaiableBlocks.pop();
-		return tmp;
-	}
-	void deallocate(pointer p, std::size_t size) {
-		if (size > 1) {
-			throw std::abort;
-		}
-		avaiableBlocks.pushBack(p);
-	}
-	template< class U >
-	void destroy( U* p ){
-		p->~T();
-	}
-	template <typename U,typename ...Args >
-	void construct(U* p, Args&& ...args) {
-		new(p) U(std::forward<Args>(args)...);
-	}
-	template<typename U>
-	struct rebind
-	{
-		typedef MyAllocator<U,PoolSize> other;
-	};
-	size_type max_size() const {
-		return PoolSize;
-	}
-	MyAllocator(const MyAllocator& other) {
-		initAvaiableBlocks();
-	}
-	template< class U >
-	MyAllocator(const MyAllocator<U,PoolSize>& other) {
-		initAvaiableBlocks();
-	}
-private:
-	void initAvaiableBlocks() {
-		for (auto i = 0; i < PoolSize; i++) {
-			avaiableBlocks.pushBack(&(memoryPool)[i]);
-		}
-	}
-};
+  return (n == 1 || n == 0) ? 1 : factorial(n - 1) * n;
+}
 
 int main()
 {
-	std::map<long, long, std::less<const long>, MyAllocator<std::pair<const long, long>, 1024>> a;
-	for (auto i = 0; i < 1023; i++) {
-		a.insert({ i, i*i });
+	std::map<long, long> stdAllocMap;
+	std::map<long, long, std::less<const long>, MyAllocator<std::pair<const long, long>, 11>> customAllocMap;
+	MyCustomContainer<int,MyAllocator<int,11>> myContainer;
+	for (auto i = 0; i < 10; i++) {
+		long fact = factorial(i);
+		stdAllocMap.insert({ i, fact });
+		customAllocMap.insert({i,fact});
+		myContainer.insert(i);
 	}
-	for (auto i = 512; i < 1023; i++) {
-			a.erase(i);
+	for(auto &i:customAllocMap){
+		std::cout<<i.first<<" "<<i.second<<std::endl;
 	}
+	for (auto i = 5; i < 10; i++) {
+			customAllocMap.erase(i);
+	}
+	for(auto &i:customAllocMap){
+		std::cout<<i.first<<" "<<i.second<<std::endl;
+	}
+	
+	myContainer.forEach([](int a){
+		std::cout<<a<<std::endl;
+	});
+	
 	return 0;
 }
 
