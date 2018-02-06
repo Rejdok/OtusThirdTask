@@ -2,6 +2,11 @@
 #include <array>
 #include <list>
 #include <memory>
+#include <functional>
+#include <iostream>
+#include <utility>
+//simple pool allocator can't use whith array,vector, e.t.c.
+
 template<class T, size_t Size>
 class RingBuffer {
 public:
@@ -10,12 +15,12 @@ public:
 	void pushBack(T val) {
 		if (haveFreeSpase()) {
 			buf[head] = val;
-			head = (head + 1)%(Size);
+			head = (head + 1) % (Size);
 		}
 	}
 	void pop() {
 		if (!isEmpty()) {
-			tail = (tail + 1)%(Size);
+			tail = (tail + 1) % (Size);
 		}
 	}
 	T& getTail() {
@@ -25,7 +30,7 @@ public:
 		return buf[head];
 	}
 	bool isFull() {
-		return ((head + 1)%(Size)) == tail;
+		return ((head + 1) % (Size)) == tail;
 	}
 	bool isEmpty() {
 		return head == tail;
@@ -48,7 +53,7 @@ protected:
 };
 
 //simple pool allocator can't use whith array,vector, e.t.c.
-template <typename T,size_t PoolSize>
+template <typename T, size_t PoolSize>
 struct MyAllocator
 {
 	typedef T value_type;
@@ -62,56 +67,88 @@ struct MyAllocator
 	typedef std::true_type propagate_on_container_copy_assignment;
 	typedef std::true_type propagate_on_container_move_assignment;
 	typedef std::true_type propagate_on_container_swap;
-	PoolType memoryPool;
-	RingBuffer<pointer,PoolSize> avaiableBlocks;
-
-	MyAllocator() {
-		initAvaiableBlocks();
-	}
-	pointer allocate(std::size_t size) {
-		if (size>1||avaiableBlocks.isEmpty()) {
-			std::bad_alloc exception;
-			throw exception;
+	
+	MyAllocator() = default;
+	class Pool {
+	public:
+		PoolType memoryPool = {};
+		RingBuffer<pointer, PoolSize> avaiableBlocks = {};
+		Pool() {
+			initAvaiableBlocks();
 		}
-		auto tmp = avaiableBlocks.getTail();
-		avaiableBlocks.pop();
-		return tmp;
-	}
-	void deallocate(pointer p, std::size_t size) {
-		if (size > 1) {
-			throw std::abort;
+		Pool(Pool&& other) {
+			initAvaiableBlocks();
 		}
-		avaiableBlocks.pushBack(p);
+		pointer allocate(std::size_t size) {
+			std::cout << " In pool" << std::endl <<this<<" "<< &memoryPool<<std::endl;
+			if (size>1 || avaiableBlocks.isEmpty()) {
+				std::bad_alloc exception;
+				throw exception;
+			}
+			auto tmp = avaiableBlocks.getTail();
+			avaiableBlocks.pop();
+			return tmp;
+		}
+		size_type max_size() const {
+			return PoolSize;
+		}
+		size_t isFull() {
+			return avaiableBlocks.isEmpty();
+		}
+	private:
+		void initAvaiableBlocks() {
+			std::cout << "Init new pool" << std::endl << "addres = " << &memoryPool<<"this "<<this<<std::endl;
+			for (auto i = 0; i < PoolSize; i++) {
+				std::cout << "Add to pool addres" << &(memoryPool[i])<<std::endl;
+				avaiableBlocks.pushBack(&(memoryPool[i]));
+			}
+		}
+	};
+	std::shared_ptr<std::list<Pool>> memoryPools = std::make_shared<std::list<Pool>>(std::list<Pool>{});
+	MyAllocator(const MyAllocator& other) {
+		memoryPools = other.memoryPools;
 	}
 	template< class U >
-	void destroy( U* p ){
-		p->~U();
+	MyAllocator(const MyAllocator<U, PoolSize>& other) {
+		std::shared_ptr<std::list<Pool>> memoryPools = std::make_shared<std::list<Pool>>(std::list<Pool>{});
 	}
-	template <typename U,typename ...Args >
+	template <typename U, typename ...Args >
 	void construct(U* p, Args&& ...args) {
 		new(p) U(std::forward<Args>(args)...);
 	}
 	template<typename U>
 	struct rebind
 	{
-		typedef MyAllocator<U,PoolSize> other;
+		typedef MyAllocator<U, PoolSize> other;
 	};
-	size_type max_size() const {
-		return PoolSize;
+	void reserve() {
+		memoryPools->emplace_back(Pool{});
 	}
-	MyAllocator(const MyAllocator& other) {
-		initAvaiableBlocks();
+	pointer allocate(std::size_t size) {
+		Pool* avaiablePool = findAvaiablePool();
+		if (avaiablePool == nullptr) {
+			reserve();
+			avaiablePool = &(memoryPools->back());
+		}
+		std::cout << avaiablePool << " " << &(memoryPools->back())<<std::endl;
+		auto returnedPtr = avaiablePool->allocate(size);
+		std::cout << "Return form pool ptr \n"<<&avaiablePool->memoryPool <<" "<< returnedPtr<<std::endl;
+		return returnedPtr;
+	}
+	void deallocate(pointer p, std::size_t size) {
+		//current implementation doesn't dealocate resourses  
 	}
 	template< class U >
-	MyAllocator(const MyAllocator<U,PoolSize>& other) {
-		initAvaiableBlocks();
+	void destroy(U* p) {
+		p->~U();
 	}
 private:
-	void initAvaiableBlocks() {
-		for (auto i = 0; i < PoolSize; i++) {
-			avaiableBlocks.pushBack(&(memoryPool)[i]);
+	Pool* findAvaiablePool() {
+		for (auto&i : *memoryPools) {
+			if (i.isFull()==false) {
+				return &i;
+			}
 		}
+		return nullptr;
 	}
 };
-
-
