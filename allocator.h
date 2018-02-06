@@ -80,7 +80,7 @@ struct MyAllocator
 			initAvaiableBlocks();
 		}
 		pointer allocate(std::size_t size) {
-			std::cout << " In pool" << std::endl <<this<<" "<< &memoryPool<<std::endl;
+//			std::cout << " In pool" << std::endl <<this<<" "<< &memoryPool<<std::endl;
 			if (size>1 || avaiableBlocks.isEmpty()) {
 				std::bad_alloc exception;
 				throw exception;
@@ -97,9 +97,9 @@ struct MyAllocator
 		}
 	private:
 		void initAvaiableBlocks() {
-			std::cout << "Init new pool" << std::endl << "addres = " << &memoryPool<<"this "<<this<<std::endl;
+//			std::cout << "Init new pool" << std::endl << "addres = " << &memoryPool<<"this "<<this<<std::endl;
 			for (auto i = 0; i < PoolSize; i++) {
-				std::cout << "Add to pool addres" << &(memoryPool[i])<<std::endl;
+//				std::cout << "Add to pool addres" << &(memoryPool[i])<<std::endl;
 				avaiableBlocks.pushBack(&(memoryPool[i]));
 			}
 		}
@@ -130,9 +130,9 @@ struct MyAllocator
 			reserve();
 			avaiablePool = &(memoryPools->back());
 		}
-		std::cout << avaiablePool << " " << &(memoryPools->back())<<std::endl;
+//		std::cout << avaiablePool << " " << &(memoryPools->back())<<std::endl;
 		auto returnedPtr = avaiablePool->allocate(size);
-		std::cout << "Return form pool ptr \n"<<&avaiablePool->memoryPool <<" "<< returnedPtr<<std::endl;
+//		std::cout << "Return form pool ptr \n"<<&avaiablePool->memoryPool <<" "<< returnedPtr<<std::endl;
 		return returnedPtr;
 	}
 	void deallocate(pointer p, std::size_t size) {
